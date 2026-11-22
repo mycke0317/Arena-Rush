@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Arena Rush</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#17202b;font-family:Arial;touch-action:none}
+canvas{display:block;width:100vw;height:100vh}
+#title{position:absolute;top:12px;width:100%;text-align:center;color:white;font-size:23px;font-weight:bold;pointer-events:none}
+#score{position:absolute;top:48px;width:100%;text-align:center;color:white;font-weight:bold;pointer-events:none}
+#joy{position:absolute;left:25px;bottom:25px;width:120px;height:120px;border:3px solid #fff9;border-radius:50%;background:#ffffff22}
+#stick{position:absolute;left:34px;top:34px;width:46px;height:46px;border-radius:50%;background:white}
+#attack{position:absolute;right:25px;bottom:40px;width:85px;height:85px;border-radius:50%;background:#ed5146;border:4px solid white;color:white;font-weight:bold}
+#super{position:absolute;right:115px;bottom:130px;width:65px;height:65px;border-radius:50%;background:#f4b62d;border:3px solid white;color:#222;font-weight:bold}
+</style>
+</head>
+<body>
+<div id="title">ARENA RUSH</div>
+<div id="score">🔵 BLUE 0 - 0 RED 🔴</div>
+<div id="joy"><div id="stick"></div></div>
+<button id="attack">공격</button>
+<button id="super">특수</button>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x83c96b);
+
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);
+camera.position.set(0,15,12);
+camera.lookAt(0,0,0);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x597044,2));
+const light=new THREE.DirectionalLight(0xffffff,2);
+light.position.set(5,10,5);
+light.castShadow=true;
+scene.add(light);
+
+const floor=new THREE.Mesh(
+ new THREE.BoxGeometry(18,.3,18),
+ new THREE.MeshStandardMaterial({color:0x75bd55})
+);
+floor.position.y=-.2;
+floor.receiveShadow=true;
+scene.add(floor);
+
+const grid=new THREE.GridHelper(18,18,0x5c9d46,0x69aa50);
+grid.position.y=0;
+scene.add(grid);
+
+function obstacle(x,z){
+ const mesh=new THREE.Mesh(
+  new THREE.BoxGeometry(1.5,1.2,1.5),
+  new THREE.MeshStandardMaterial({color:0x98704b})
+ );
+ mesh.position.set(x,.6,z);
+ mesh.castShadow=true;
+ mesh.receiveShadow=true;
+ scene.add(mesh);
+}
+obstacle(-3,-2);
+obstacle(3,2);
+obstacle(-3,3);
+obstacle(3,-3);
+
+function character(color,x,z){
+ const group=new THREE.Group();
+ const body=new THREE.Mesh(
+  new THREE.CapsuleGeometry(.45,.55,5,12),
+  new THREE.MeshStandardMaterial({color})
+ );
+ body.position.y=.8;
+ body.castShadow=true;
+ group.add(body);
+
+ const head=new THREE.Mesh(
+  new THREE.SphereGeometry(.36,16,16),
+  new THREE.MeshStandardMaterial({color:0xffd19b})
+ );
+ head.position.y=1.65;
+ group.add(head);
+
+ group.position.set(x,0,z);
+ scene.add(group);
+ return group;
+}
+
+const player=character(0x2589ee,-5,0);
+const allies=[
+ character(0x2589ee,-6,-3),
+ character(0x2589ee,-6,3)
+];
+const enemies=[
+ character(0xe94b45,5,-3),
+ character(0xe94b45,5,0),
+ character(0xe94b45,5,3)
+];
+
+let bullets=[];
+function fire(){
+ const target=enemies.sort((a,b)=>
+ player.position.distanceTo(a.position)-
+ player.position.distanceTo(b.position))[0];
+ if(!target)return;
+ const bullet=new THREE.Mesh(
+  new THREE.SphereGeometry(.16,12,12),
+  new THREE.MeshStandardMaterial({color:0xffff55})
+ );
+ bullet.position.copy(player.position);
+ bullet.position.y=1;
+ const direction=new THREE.Vector3().subVectors(target.position,player.position).normalize();
+ bullets.push({mesh:bullet,direction,life:2});
+ scene.add(bullet);
+}
+
+let moveX=0,moveY=0;
+const joy=document.getElementById('joy');
+const stick=document.getElementById('stick');
+let pointer=null;
+
+function move(e){
+ const r=joy.getBoundingClientRect();
+ let x=e.clientX-r.left-60;
+ let y=e.clientY-r.top-60;
+ const len=Math.hypot(x,y);
+ if(len>42){x=x/len*42;y=y/len*42;}
+ moveX=x/42;moveY=y/42;
+ stick.style.left=(34+x)+'px';
+ stick.style.top=(34+y)+'px';
+}
+joy.addEventListener('pointerdown',e=>{
+ pointer=e.pointerId;
+ joy.setPointerCapture(pointer);
+ move(e);
+});
+joy.addEventListener('pointermove',e=>{
+ if(e.pointerId===pointer)move(e);
+});
+function stop(){
+ pointer=null;moveX=0;moveY=0;
+ stick.style.left='34px';stick.style.top='34px';
+}
+joy.addEventListener('pointerup',stop);
+joy.addEventListener('pointercancel',stop);
+
+document.getElementById('attack').addEventListener('pointerdown',e=>{
+ e.preventDefault();fire();
+});
+
+document.getElementById('super').addEventListener('pointerdown',e=>{
+ e.preventDefault();
+ player.scale.set(1.4,1.4,1.4);
+ setTimeout(()=>player.scale.set(1,1,1),350);
+});
+
+const clock=new THREE.Clock();
+
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.04);
+
+ player.position.x+=moveX*4*dt;
+ player.position.z+=moveY*4*dt;
+ player.position.x=THREE.MathUtils.clamp(player.position.x,-8,8);
+ player.position.z=THREE.MathUtils.clamp(player.position.z,-8,8);
+
+ for(const b of bullets){
+  b.mesh.position.addScaledVector(b.direction,7*dt);
+  b.life-=dt;
+ }
+ bullets=bullets.filter(b=>{
+  if(b.life<=0){
+   scene.remove(b.mesh);
+   return false;
+  }
+  return true;
+ });
+
+ camera.position.x=player.position.x*.15;
+ camera.lookAt(player.position.x*.15,0,0);
+ renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
